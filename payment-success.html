@@ -6,11 +6,12 @@
   <title>Paiement réussi - Boutique en ligne</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="icon" href="data:,">
+  <script src="https://js.stripe.com/v3/"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getFirestore, doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
     
-    // Initialiser Firebase avec la même configuration
+    // Configuration Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyAyhgERyprPvyYQfznLe-ksBu0lALsHG_I",
       authDomain: "produit-93588.firebaseapp.com",
@@ -20,33 +21,51 @@
       appId: "1:1011656067444:web:591c2fc500bc0b42ce8421"
     };
     
+    // Initialiser Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     
-    // Mettre à jour le statut de la commande
-    window.addEventListener('DOMContentLoaded', async () => {
+    // Fonction pour mettre à jour la commande
+    async function updateOrderStatus() {
       try {
+        // Récupérer les paramètres de l'URL
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session_id');
-        const orderId = localStorage.getItem('pendingOrderId');
+        const orderId = urlParams.get('order_id') || localStorage.getItem('pendingOrderId');
         
-        if (orderId && sessionId) {
-          await updateDoc(doc(db, "orders", orderId), {
-            status: 'paid',
-            paymentSessionId: sessionId,
-            paymentDate: new Date()
-          });
-          
-          console.log("Commande mise à jour avec succès!");
-          localStorage.removeItem('pendingOrderId');
-          
-          // Vider le panier
-          localStorage.removeItem('cart');
+        // Vérifier qu'on a bien un ID de commande et de session
+        if (!orderId || !sessionId) {
+          console.error("Impossible de trouver l'ID de commande ou de session");
+          return;
         }
+        
+        console.log(`Mise à jour de la commande ${orderId} avec session ${sessionId}`);
+        
+        // Mettre à jour le statut de la commande dans Firestore
+        await updateDoc(doc(db, "orders", orderId), {
+          status: 'paid',
+          paymentSessionId: sessionId,
+          paymentDate: new Date()
+        });
+        
+        console.log("Commande mise à jour avec succès!");
+        
+        // Nettoyer le localStorage
+        localStorage.removeItem('pendingOrderId');
+        localStorage.removeItem('cart');
+        
+        // Afficher un message de confirmation
+        document.getElementById('order-id').textContent = orderId;
+        document.getElementById('success-message').style.display = 'block';
       } catch (error) {
         console.error("Erreur lors de la mise à jour de la commande:", error);
+        document.getElementById('error-message').textContent = error.message;
+        document.getElementById('error-message').style.display = 'block';
       }
-    });
+    }
+    
+    // Exécuter la mise à jour une fois que le DOM est chargé
+    window.addEventListener('DOMContentLoaded', updateOrderStatus);
   </script>
 </head>
 <body>
@@ -60,9 +79,15 @@
   <main>
     <section id="success-section">
       <h2>Paiement réussi !</h2>
-      <p>Merci pour votre commande. Votre paiement a été traité avec succès.</p>
-      <p>Un e-mail de confirmation vous a été envoyé.</p>
-      <p>Votre commande sera traitée dans les plus brefs délais.</p>
+      <div id="success-message" style="display: none;">
+        <p>Merci pour votre commande. Votre paiement a été traité avec succès.</p>
+        <p>Numéro de commande : <strong id="order-id"></strong></p>
+        <p>Un e-mail de confirmation vous a été envoyé.</p>
+        <p>Votre commande sera traitée dans les plus brefs délais.</p>
+      </div>
+      <div id="error-message" style="display: none; color: red;">
+        Une erreur est survenue lors de la finalisation de votre commande.
+      </div>
       <a href="index.html" class="button">Continuer mes achats</a>
     </section>
   </main>

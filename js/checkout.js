@@ -6,50 +6,37 @@ async function processPayment(cartItems, orderId, total) {
   try {
     // Vérifier si l'utilisateur est connecté
     if (!window.firebaseAuth.currentUser) {
-      showNotification("Veuillez vous connecter pour effectuer un paiement", "error");
+      window.showNotification("Veuillez vous connecter pour effectuer un paiement", "error");
       return;
     }
 
-    // Préparer les données pour la session Stripe
-    const items = cartItems.map(item => ({
-      id: item.id,
-      name: item.name,
-      price: item.price
-    }));
-
-    // Stocker l'ID de commande pour référence
+    // Stocker l'ID de commande dans localStorage pour le récupérer après paiement
     localStorage.setItem('pendingOrderId', orderId);
 
-    // Appeler l'API route pour créer une session Stripe
-    const response = await fetch('/api/create-checkout-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        items: items,
-        orderId: orderId,
-        userId: window.firebaseAuth.currentUser.uid,
-        userEmail: window.firebaseAuth.currentUser.email
-      }),
+    // Utiliser directement Stripe Checkout sans passer par l'API
+    const { error } = await stripe.redirectToCheckout({
+      mode: 'payment',
+      lineItems: cartItems.map(item => ({
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: item.name,
+          },
+          unit_amount: item.price * 100, // Stripe utilise les centimes
+        },
+        quantity: 1,
+      })),
+      successUrl: `${window.location.origin}/payment-success.html?session_id={CHECKOUT_SESSION_ID}&order_id=${orderId}`,
+      cancelUrl: `${window.location.origin}/payment-cancel.html`,
+      customerEmail: window.firebaseAuth.currentUser.email,
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Erreur lors de la création de la session de paiement');
-    }
-
-    const { sessionId } = await response.json();
-
-    // Rediriger vers la page de paiement Stripe
-    const { error } = await stripe.redirectToCheckout({ sessionId });
 
     if (error) {
       throw new Error(error.message);
     }
   } catch (error) {
     console.error("Erreur lors du traitement du paiement:", error);
-    showNotification("Erreur lors du paiement: " + error.message, "error");
+    window.showNotification("Erreur lors du paiement: " + error.message, "error");
   }
 }
 
