@@ -6,6 +6,7 @@
   <title>Paiement réussi - Boutique en ligne</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="icon" href="data:,">
+  <script src="https://js.stripe.com/v3/"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getFirestore, doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
@@ -29,7 +30,7 @@
       try {
         // Récupérer les paramètres de l'URL
         const urlParams = new URLSearchParams(window.location.search);
-        const paymentId = urlParams.get('payment_id');
+        const sessionId = urlParams.get('session_id'); // ID de session Stripe
         const orderId = urlParams.get('order_id') || localStorage.getItem('pendingOrderId');
         
         // Vérifier qu'on a bien un ID de commande
@@ -37,24 +38,25 @@
           throw new Error("Impossible de trouver l'ID de commande");
         }
         
-        console.log(`Mise à jour de la commande ${orderId} avec paiement ${paymentId}`);
+        console.log(`Mise à jour de la commande ${orderId} avec session Stripe ${sessionId}`);
         
         // Mettre à jour le statut de la commande dans Firestore
         await updateDoc(doc(db, "orders", orderId), {
           status: 'paid',
-          paymentId: paymentId || 'payment_simulated',
+          stripeSessionId: sessionId || 'direct_payment',
           paymentDate: new Date()
         });
         
         console.log("Commande mise à jour avec succès!");
         
-        // Nettoyer le localStorage
+        // IMPORTANT: Vider le panier et autres données temporaires
         localStorage.removeItem('pendingOrderId');
-        localStorage.removeItem('cart');
+        localStorage.removeItem('cartTotal');
+        localStorage.removeItem('cart'); // Vide le panier
         
-        // Afficher un message de confirmation
+        // Afficher les informations de la commande
         document.getElementById('order-id').textContent = orderId;
-        document.getElementById('payment-id').textContent = paymentId || 'N/A';
+        document.getElementById('payment-id').textContent = sessionId || 'Paiement direct';
         document.getElementById('success-message').style.display = 'block';
       } catch (error) {
         console.error("Erreur lors de la mise à jour de la commande:", error);
