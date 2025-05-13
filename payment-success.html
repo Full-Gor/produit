@@ -30,7 +30,7 @@
       try {
         // Récupérer les paramètres de l'URL
         const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session_id'); // ID de session Stripe
+        const sessionId = urlParams.get('session_id');
         const orderId = urlParams.get('order_id') || localStorage.getItem('pendingOrderId');
         
         // Vérifier qu'on a bien un ID de commande
