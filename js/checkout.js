@@ -1,5 +1,6 @@
 /**
  * Module de gestion des paiements pour la boutique en ligne
+ * Ce module intègre Stripe Checkout via une API serverless
  */
 
 // Initialiser Stripe avec votre clé publique
@@ -14,51 +15,59 @@ async function processPayment(cartItems, orderId, total) {
       return;
     }
 
-    // Stocker l'ID de commande
+    // Stocker dans localStorage pour un accès plus facile
     localStorage.setItem('pendingOrderId', orderId);
-    window.showNotification("Redirection vers la page de paiement...", "info");
+    localStorage.setItem('cartTotal', total);
     
-    // Utiliser un prix prédéfini dans Stripe (le plus simple)
-    const priceId = 'price_VOTRE_ID_PRIX'; // REMPLACEZ PAR VOTRE ID DE PRIX
+    // Afficher un message à l'utilisateur
+    window.showNotification("Préparation du paiement...", "info");
     
-    // Options de redirection
-    const options = {
-      lineItems: [{
-        price: priceId, 
-        quantity: 1
-      }],
-      mode: 'payment',
-      successUrl: `${window.location.origin}/payment-success.html?order_id=${orderId}&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${window.location.origin}/payment-cancel.html`,
-      customerEmail: window.firebaseAuth.currentUser.email
-    };
+    // Appeler notre API serverless pour créer une session Stripe
+    const response = await fetch('/api/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        items: cartItems,
+        orderId: orderId,
+        userId: window.firebaseAuth.currentUser.uid,
+        email: window.firebaseAuth.currentUser.email
+      }),
+    });
     
-    console.log("Redirection vers Stripe...");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erreur lors de la création de la session de paiement");
+    }
     
-    // Rediriger vers Stripe Checkout
-    const { error } = await stripe.redirectToCheckout(options);
+    const { sessionId } = await response.json();
+    
+    // Rediriger vers Stripe Checkout avec l'ID de session
+    const { error } = await stripe.redirectToCheckout({
+      sessionId: sessionId
+    });
     
     if (error) {
-      console.error("Erreur Stripe:", error);
       throw new Error(error.message);
     }
-  } catch (error) {
-    console.error("Erreur de paiement:", error);
-    window.showNotification("Erreur: " + error.message, "error");
     
-    // Fallback: simuler un paiement
-    console.log("Utilisation du mode de paiement simulé...");
+  } catch (error) {
+    console.error("Erreur lors du traitement du paiement:", error);
+    window.showNotification("Erreur lors du paiement: " + error.message, "error");
+    
+    // En cas d'erreur, rediriger vers la page d'annulation
     setTimeout(() => {
-      const simSessionId = 'sim_' + Date.now();
-      window.location.href = `payment-success.html?order_id=${orderId}&session_id=${simSessionId}`;
-    }, 2000);
+      window.location.href = 'payment-cancel.html';
+    }, 1500);
   }
 }
 
-// Export pour l'application
-window.processPayment = processPayment;
-
-// Autres fonctions utiles
+/**
+ * Format un montant pour l'affichage
+ * @param {number} amount - Montant à formater
+ * @returns {string} Montant formaté avec 2 décimales et symbole €
+ */
 function formatAmount(amount) {
   return new Intl.NumberFormat('fr-FR', { 
     style: 'currency', 
@@ -67,7 +76,19 @@ function formatAmount(amount) {
   }).format(amount);
 }
 
+/**
+ * Calcule le total du panier
+ * @param {Array} items - Articles du panier
+ * @returns {number} Total du panier
+ */
+function calculateTotal(items) {
+  return items.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
+}
+
+// Exporter les fonctions pour les utiliser dans l'application
+window.processPayment = processPayment;
 window.formatAmount = formatAmount;
+window.calculateTotal = calculateTotal;
 
 // Log pour confirmer que le module a été chargé
-console.log("Module de paiement Stripe initialisé (version simplifiée)");
+console.log("Module de paiement initialisé avec API serverless");
