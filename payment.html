@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paiement - Boutique en ligne</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:,">
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    .payment-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .card-element {
+      margin: 20px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .button-pay {
+      background: #4CAF50;
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+    }
+    .button-pay:hover {
+      background: #45a049;
+    }
+    
+    .payment-summary {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #eee;
+    }
+    .item-list {
+      margin: 15px 0;
+    }
+    .item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .total {
+      font-weight: bold;
+      font-size: 18px;
+      margin-top: 15px;
+      text-align: right;
+    }
+    #payment-form {
+      margin-top: 20px;
+    }
+    #card-errors {
+      color: #e74c3c;
+      margin-top: 10px;
+    }
+    .form-row {
+      margin-bottom: 15px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Boutique en ligne</h1>
+    <nav>
+      <a href="index.html">Retour à la boutique</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="payment-container">
+      <h2>Paiement sécurisé</h2>
+      
+      <div class="payment-summary">
+        <h3>Récapitulatif de la commande</h3>
+        <div class="item-list" id="order-items">
+          <!-- Les éléments du panier seront insérés ici -->
+        </div>
+        <div class="total">Total: <span id="order-total">0</span> €</div>
+      </div>
+      
+      <form id="payment-form">
+        <div class="form-row">
+          <label for="card-element">Carte de crédit</label>
+          <div id="card-element" class="card-element">
+            <!-- Un élément Stripe Card sera inséré ici -->
+          </div>
+          <div id="card-errors" role="alert"></div>
+        </div>
+        
+        <button id="submit-button" class="button-pay">
+          <div id="spinner" class="spinner hidden"></div>
+          <span id="button-text">Payer maintenant</span>
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAuth } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+    
+    // Configuration Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyAyhgERyprPvyYQfznLe-ksBu0lALsHG_I",
+      authDomain: "produit-93588.firebaseapp.com",
+      projectId: "produit-93588",
+      storageBucket: "produit-93588.firebasestorage.app",
+      messagingSenderId: "1011656067444",
+      appId: "1:1011656067444:web:591c2fc500bc0b42ce8421"
+    };
+    
+    // Initialiser Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    
+    // Initialiser Stripe
+    const stripe = Stripe('pk_test_VOTRE_CLE_PUBLIQUE_STRIPE');
+    const elements = stripe.elements();
+    
+    // Créer un élément Card et le monter dans le DOM
+    const cardElement = elements.create('card');
+    cardElement.mount('#card-element');
+    
+    // Gérer les erreurs de validation de la carte
+    cardElement.on('change', ({error}) => {
+      const displayError = document.getElementById('card-errors');
+      if (error) {
+        displayError.textContent = error.message;
+      } else {
+        displayError.textContent = '';
+      }
+    });
+    
+    // Charger les détails de la commande
+    async function loadOrderDetails() {
+      try {
+        // Récupérer l'ID de commande de l'URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('orderId');
+        
+        if (!orderId) {
+          throw new Error("ID de commande manquant");
+        }
+        
+        // Récupérer les détails de la commande depuis Firestore
+        const orderDoc = await getDoc(doc(db, "orders", orderId));
+        
+        if (!orderDoc.exists()) {
+          throw new Error("Commande introuvable");
+        }
+        
+        const orderData = orderDoc.data();
+        
+        // Afficher les éléments de la commande
+        const orderItems = document.getElementById('order-items');
+        orderItems.innerHTML = '';
+        
+        orderData.items.forEach(item => {
+          const itemElement = document.createElement('div');
+          itemElement.className = 'item';
+          itemElement.innerHTML = `
+            <span>${item.name}</span>
+            <span>${item.price} €</span>
+          `;
+          orderItems.appendChild(itemElement);
+        });
+        
+        // Afficher le total
+        document.getElementById('order-total').textContent = orderData.total;
+        
+        // Configurer le formulaire de paiement
+        const form = document.getElementById('payment-form');
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          
+          // Désactiver le bouton et afficher le spinner
+          const submitButton = document.getElementById('submit-button');
+          submitButton.disabled = true;
+          document.getElementById('spinner').classList.remove('hidden');
+          document.getElementById('button-text').textContent = 'Traitement en cours...';
+          
+          try {
+            // Créer une méthode de paiement
+            const {paymentMethod, error} = await stripe.createPaymentMethod({
+              type: 'card',
+              card: cardElement,
+            });
+            
+            if (error) {
+              throw new Error(error.message);
+            }
+            
+            // Simuler un paiement réussi (dans un vrai système, vous appelleriez votre backend)
+            // Rediriger vers la page de succès
+            localStorage.setItem('pendingOrderId', orderId);
+            localStorage.setItem('paymentMethodId', paymentMethod.id);
+            
+            window.location.href = `payment-success.html?order_id=${orderId}&payment_id=${paymentMethod.id}`;
+          } catch (error) {
+            // Afficher l'erreur
+            document.getElementById('card-errors').textContent = error.message;
+            
+            // Réactiver le bouton
+            submitButton.disabled = false;
+            document.getElementById('spinner').classList.add('hidden');
+            document.getElementById('button-text').textContent = 'Payer maintenant';
+          }
+        });
+        
+      } catch (error) {
+        console.error("Erreur:", error);
+        alert("Erreur: " + error.message);
+      }
+    }
+    
+    // Charger les détails quand la page est prête
+    document.addEventListener('DOMContentLoaded', loadOrderDetails);
+  </script>
+  
+  <footer>
+    <p>&copy; 2025 Boutique en ligne</p>
+  </footer>
+</body>
+</html>

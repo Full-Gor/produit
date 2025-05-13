@@ -6,7 +6,6 @@
   <title>Paiement réussi - Boutique en ligne</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="icon" href="data:,">
-  <script src="https://js.stripe.com/v3/"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getFirestore, doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
@@ -30,21 +29,20 @@
       try {
         // Récupérer les paramètres de l'URL
         const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session_id');
+        const paymentId = urlParams.get('payment_id');
         const orderId = urlParams.get('order_id') || localStorage.getItem('pendingOrderId');
         
-        // Vérifier qu'on a bien un ID de commande et de session
-        if (!orderId || !sessionId) {
-          console.error("Impossible de trouver l'ID de commande ou de session");
-          return;
+        // Vérifier qu'on a bien un ID de commande
+        if (!orderId) {
+          throw new Error("Impossible de trouver l'ID de commande");
         }
         
-        console.log(`Mise à jour de la commande ${orderId} avec session ${sessionId}`);
+        console.log(`Mise à jour de la commande ${orderId} avec paiement ${paymentId}`);
         
         // Mettre à jour le statut de la commande dans Firestore
         await updateDoc(doc(db, "orders", orderId), {
           status: 'paid',
-          paymentSessionId: sessionId,
+          paymentId: paymentId || 'payment_simulated',
           paymentDate: new Date()
         });
         
@@ -56,6 +54,7 @@
         
         // Afficher un message de confirmation
         document.getElementById('order-id').textContent = orderId;
+        document.getElementById('payment-id').textContent = paymentId || 'N/A';
         document.getElementById('success-message').style.display = 'block';
       } catch (error) {
         console.error("Erreur lors de la mise à jour de la commande:", error);
@@ -67,6 +66,61 @@
     // Exécuter la mise à jour une fois que le DOM est chargé
     window.addEventListener('DOMContentLoaded', updateOrderStatus);
   </script>
+  <style>
+    #success-section {
+      background-color: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      max-width: 600px;
+      margin: 2rem auto;
+    }
+    
+    #success-section h2 {
+      color: #28a745;
+    }
+    
+    .button {
+      display: inline-block;
+      background-color: #007bff;
+      color: white;
+      padding: 10px 20px;
+      text-decoration: none;
+      border-radius: 5px;
+      margin-top: 20px;
+    }
+    
+    .button:hover {
+      background-color: #0056b3;
+    }
+    
+    #error-message {
+      background-color: #ffebee;
+      color: #c62828;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 15px 0;
+    }
+    
+    .order-details {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    
+    .order-details p {
+      margin: 8px 0;
+    }
+    
+    .success-icon {
+      font-size: 64px;
+      color: #28a745;
+      margin-bottom: 20px;
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -78,14 +132,27 @@
 
   <main>
     <section id="success-section">
+      <div class="success-icon">✓</div>
       <h2>Paiement réussi !</h2>
       <div id="success-message" style="display: none;">
         <p>Merci pour votre commande. Votre paiement a été traité avec succès.</p>
-        <p>Numéro de commande : <strong id="order-id"></strong></p>
+        
+        <div class="order-details">
+          <p><strong>Numéro de commande :</strong> <span id="order-id"></span></p>
+          <p><strong>Référence du paiement :</strong> <span id="payment-id"></span></p>
+          <p><strong>Date :</strong> <span id="current-date"></span></p>
+        </div>
+        
         <p>Un e-mail de confirmation vous a été envoyé.</p>
         <p>Votre commande sera traitée dans les plus brefs délais.</p>
+        
+        <script>
+          // Afficher la date actuelle
+          const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+          document.getElementById('current-date').textContent = new Date().toLocaleDateString('fr-FR', options);
+        </script>
       </div>
-      <div id="error-message" style="display: none; color: red;">
+      <div id="error-message" style="display: none;">
         Une erreur est survenue lors de la finalisation de votre commande.
       </div>
       <a href="index.html" class="button">Continuer mes achats</a>
