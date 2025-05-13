@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Boutique en ligne</title>
-  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="css/styles.css">
   <link rel="icon" href="data:,">
+  <!-- Ajouter Stripe.js -->
+  <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body>
   <header>
@@ -13,7 +15,7 @@
     <nav>
       <span id="user-status">Non connecté</span>
       <button id="login-btn">Connexion</button>
-<button id="signup-btn">Inscription</button>
+      <button id="signup-btn">Inscription</button>
       <button id="logout-btn" style="display: none;">Déconnexion</button>
       <button id="cart-btn">Panier (<span id="cart-count">0</span>)</button>
       <button id="orders-btn" style="display: none;">Mes commandes</button>
@@ -45,7 +47,7 @@
       <h2>Votre panier</h2>
       <div id="cart-items"></div>
       <p>Total : <span id="cart-total">0</span> €</p>
-      <button id="checkout-btn">Passer la commande</button>
+      <button id="checkout-btn">Passer au paiement</button>
     </section>
 
     <!-- Historique des commandes -->
@@ -57,18 +59,18 @@
 
   <!-- Firebase SDK -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAuth } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+    import { getFirestore } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
     const firebaseConfig = {
-  apiKey: "AIzaSyAyhgERyprPvyYQfznLe-ksBu0lALsHG_I",
-  authDomain: "produit-93588.firebaseapp.com",
-  projectId: "produit-93588",
-  storageBucket: "produit-93588.firebasestorage.app",
-  messagingSenderId: "1011656067444",
-  appId: "1:1011656067444:web:591c2fc500bc0b42ce8421"
-};
+      apiKey: "AIzaSyAyhgERyprPvyYQfznLe-ksBu0lALsHG_I",
+      authDomain: "produit-93588.firebaseapp.com",
+      projectId: "produit-93588",
+      storageBucket: "produit-93588.firebasestorage.app",
+      messagingSenderId: "1011656067444",
+      appId: "1:1011656067444:web:591c2fc500bc0b42ce8421"
+    };
 
     // Définir showNotification globalement AVANT de l'utiliser
     window.showNotification = function(message, type) {
@@ -90,20 +92,20 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Vérification connexion Firebase
     console.log("Firebase initialisé :", app.name);
-    window.showNotification("Connexion à Firebase réussie", "success");
-
+    
     // Export pour app.js
     window.firebaseAuth = auth;
     window.firestoreDB = db;
-  </script>
-  <script type="module">
-    // Attendez que tout soit chargé avant d'importer app.js
+    
+    // Informer lorsque le DOM est chargé
     window.addEventListener('DOMContentLoaded', () => {
-      import('./js/app.js')
-        .catch(err => console.error("Erreur lors du chargement de app.js:", err));
+      console.log("content loaded");
     });
   </script>
+  
+  <!-- Scripts de l'application -->
+  <script type="module" src="js/checkout.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

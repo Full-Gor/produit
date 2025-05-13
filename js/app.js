@@ -3,14 +3,18 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-} from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
   collection,
   addDoc,
   getDocs,
   query,
   where,
-} from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+  doc,
+  updateDoc,
+  serverTimestamp,
+  orderBy
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
 const auth = window.firebaseAuth;
 const db = window.firestoreDB;
@@ -22,8 +26,21 @@ const products = [
   { id: 3, name: "Chaussures", price: 80 },
 ];
 
-// Panier's state
+// Panier's state - Charger depuis localStorage s'il existe
 let cart = [];
+try {
+  const savedCart = localStorage.getItem('cart');
+  if (savedCart) {
+    cart = JSON.parse(savedCart);
+  }
+} catch (e) {
+  console.error("Erreur lors du chargement du panier:", e);
+}
+
+// Fonction pour sauvegarder le panier dans localStorage
+function saveCart() {
+  localStorage.setItem('cart', JSON.stringify(cart));
+}
 
 // Afficher les produits
 function displayProducts() {
@@ -46,6 +63,7 @@ window.addToCart = function (productId) {
   if (product) {
     cart.push(product);
     updateCart();
+    saveCart();
     showNotification(`${product.name} ajouté au panier`, "success");
   }
 };
@@ -76,10 +94,11 @@ function updateCart() {
 window.removeFromCart = function (index) {
   const item = cart.splice(index, 1)[0];
   updateCart();
+  saveCart();
   showNotification(`${item.name} retiré du panier`, "success");
 };
 
-// Passer la commande
+// Passer la commande avec Stripe Checkout
 async function checkout() {
   if (!auth.currentUser) {
     showNotification(
@@ -94,17 +113,25 @@ async function checkout() {
   }
 
   try {
-    await addDoc(collection(db, "orders"), {
+    // Calculer le total
+    const total = cart.reduce((sum, item) => sum + item.price, 0);
+    
+    // Enregistrer d'abord la commande dans Firestore
+    const orderRef = await addDoc(collection(db, "orders"), {
       userId: auth.currentUser.uid,
       items: cart,
-      total: cart.reduce((sum, item) => sum + item.price, 0),
-      timestamp: new Date(),
+      total: total,
+      status: 'pending', // Commande en attente de paiement
+      timestamp: serverTimestamp()
     });
-    cart = [];
-    updateCart();
-    showNotification("Commande passée avec succès", "success");
-    displayOrders();
+    
+    showNotification("Redirection vers la page de paiement...", "info");
+    
+    // Rediriger vers Stripe Checkout
+    await window.processPayment(cart, orderRef.id, total);
+    
   } catch (error) {
+    console.error("Erreur:", error);
     showNotification("Erreur lors de la commande : " + error.message, "error");
   }
 }
@@ -117,17 +144,37 @@ async function displayOrders() {
   try {
     const q = query(
       collection(db, "orders"),
-      where("userId", "==", auth.currentUser.uid)
+      where("userId", "==", auth.currentUser.uid),
+      orderBy("timestamp", "desc")
     );
+    
     const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      orderList.innerHTML = "<p>Vous n'avez pas encore passé de commande.</p>";
+      return;
+    }
+    
     querySnapshot.forEach((doc) => {
       const order = doc.data();
+      const orderDate = order.timestamp ? new Date(order.timestamp.toDate()).toLocaleDateString() : 'Date inconnue';
+      
       const div = document.createElement("div");
       div.className = "order";
+      
+      // Ajouter un badge de statut
+      let statusBadge = '';
+      if (order.status === 'paid') {
+        statusBadge = '<span class="status-badge status-paid">Payée</span>';
+      } else if (order.status === 'pending') {
+        statusBadge = '<span class="status-badge status-pending">En attente</span>';
+      }
+      
       div.innerHTML = `
-        <span>Commande du ${new Date(
-          order.timestamp.toDate()
-        ).toLocaleDateString()} - ${order.total} €</span>
+        <div class="order-header">
+          <span>Commande du ${orderDate} - ${order.total} € </span>
+          ${statusBadge}
+        </div>
         <ul>${order.items
           .map((item) => `<li>${item.name} - ${item.price} €</li>`)
           .join("")}</ul>
@@ -135,6 +182,7 @@ async function displayOrders() {
       orderList.appendChild(div);
     });
   } catch (error) {
+    console.error("Erreur:", error);
     showNotification(
       "Erreur lors du chargement des commandes : " + error.message,
       "error"
@@ -169,13 +217,13 @@ function setupAuth() {
       e.preventDefault();
       const email = document.getElementById("email").value;
       const password = document.getElementById("password").value;
-
+      
       // Vérifier que les champs ne sont pas vides
       if (!email || !password) {
         showNotification("Veuillez remplir tous les champs", "error");
         return;
       }
-
+      
       try {
         await signInWithEmailAndPassword(auth, email, password);
         showNotification("Connexion réussie", "success");
@@ -183,20 +231,14 @@ function setupAuth() {
       } catch (error) {
         console.error("Code d'erreur:", error.code);
         console.error("Message d'erreur complet:", error.message);
-
+        
         // Messages d'erreur personnalisés pour une meilleure expérience utilisateur
         if (error.code === "auth/user-not-found") {
-          showNotification(
-            "Utilisateur introuvable. Veuillez vous inscrire.",
-            "error"
-          );
+          showNotification("Utilisateur introuvable. Veuillez vous inscrire.", "error");
         } else if (error.code === "auth/wrong-password") {
           showNotification("Mot de passe incorrect.", "error");
         } else if (error.code === "auth/invalid-credential") {
-          showNotification(
-            "Identifiants invalides. Vérifiez votre email et mot de passe.",
-            "error"
-          );
+          showNotification("Identifiants invalides. Vérifiez votre email et mot de passe.", "error");
         } else {
           showNotification("Erreur : " + error.message, "error");
         }
@@ -204,7 +246,7 @@ function setupAuth() {
     };
   });
 
-  // Gestionnaire pour le bouton d'inscription - FIXÉ ICI
+  // Gestionnaire pour le bouton d'inscription
   document.getElementById("signup-btn").addEventListener("click", () => {
     authSection.style.display = "block";
     authTitle.textContent = "Inscription";
@@ -213,22 +255,19 @@ function setupAuth() {
       e.preventDefault();
       const email = document.getElementById("email").value;
       const password = document.getElementById("password").value;
-
+      
       // Vérifier que les champs ne sont pas vides
       if (!email || !password) {
         showNotification("Veuillez remplir tous les champs", "error");
         return;
       }
-
+      
       // Vérifier que le mot de passe a au moins 6 caractères
       if (password.length < 6) {
-        showNotification(
-          "Le mot de passe doit comporter au moins 6 caractères",
-          "error"
-        );
+        showNotification("Le mot de passe doit comporter au moins 6 caractères", "error");
         return;
       }
-
+      
       try {
         await createUserWithEmailAndPassword(auth, email, password);
         showNotification("Inscription réussie", "success");
@@ -236,20 +275,14 @@ function setupAuth() {
       } catch (error) {
         console.error("Code d'erreur:", error.code);
         console.error("Message d'erreur complet:", error.message);
-
+        
         // Messages d'erreur personnalisés
         if (error.code === "auth/email-already-in-use") {
-          showNotification(
-            "Cet email est déjà utilisé. Essayez de vous connecter.",
-            "error"
-          );
+          showNotification("Cet email est déjà utilisé. Essayez de vous connecter.", "error");
         } else if (error.code === "auth/invalid-email") {
           showNotification("Format d'email invalide.", "error");
         } else if (error.code === "auth/weak-password") {
-          showNotification(
-            "Mot de passe trop faible. Utilisez au moins 6 caractères.",
-            "error"
-          );
+          showNotification("Mot de passe trop faible. Utilisez au moins 6 caractères.", "error");
         } else {
           showNotification("Erreur : " + error.message, "error");
         }
@@ -314,4 +347,5 @@ onAuthStateChanged(auth, (user) => {
 
 // Initialisation
 displayProducts();
+updateCart(); // Mettre à jour le panier au chargement
 setupAuth();

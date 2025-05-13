@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paiement réussi - Boutique en ligne</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:,">
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getFirestore, doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+    
+    // Initialiser Firebase avec la même configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyAyhgERyprPvyYQfznLe-ksBu0lALsHG_I",
+      authDomain: "produit-93588.firebaseapp.com",
+      projectId: "produit-93588",
+      storageBucket: "produit-93588.firebasestorage.app",
+      messagingSenderId: "1011656067444",
+      appId: "1:1011656067444:web:591c2fc500bc0b42ce8421"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    
+    // Mettre à jour le statut de la commande
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id');
+        const orderId = localStorage.getItem('pendingOrderId');
+        
+        if (orderId && sessionId) {
+          await updateDoc(doc(db, "orders", orderId), {
+            status: 'paid',
+            paymentSessionId: sessionId,
+            paymentDate: new Date()
+          });
+          
+          console.log("Commande mise à jour avec succès!");
+          localStorage.removeItem('pendingOrderId');
+          
+          // Vider le panier
+          localStorage.removeItem('cart');
+        }
+      } catch (error) {
+        console.error("Erreur lors de la mise à jour de la commande:", error);
+      }
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Boutique en ligne</h1>
+    <nav>
+      <a href="index.html">Retour à la boutique</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="success-section">
+      <h2>Paiement réussi !</h2>
+      <p>Merci pour votre commande. Votre paiement a été traité avec succès.</p>
+      <p>Un e-mail de confirmation vous a été envoyé.</p>
+      <p>Votre commande sera traitée dans les plus brefs délais.</p>
+      <a href="index.html" class="button">Continuer mes achats</a>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Boutique en ligne</p>
+  </footer>
+</body>
+</html>
