@@ -105,6 +105,10 @@ section {
     background-color: #dc3545;
 }
 
+.notification.info {
+    background-color: #17a2b8;
+}
+
 /* Styles pour les pages de paiement */
 #success-section,
 #cancel-section {
@@ -145,4 +149,53 @@ footer {
     padding: 20px;
     background-color: #333;
     color: white;
+}
+
+/* Statut de commande */
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    margin-left: 10px;
+}
+
+.status-paid {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-pending {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.order-header {
+    display: flex;
+    align-items: center;
+}
+
+/* Styles pour la page de commande */
+.order-details {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.order-details p {
+    margin: 8px 0;
+}
+
+.success-icon {
+    font-size: 64px;
+    color: #28a745;
+    margin-bottom: 20px;
+}
+
+.cancel-icon {
+    font-size: 64px;
+    color: #dc3545;
+    margin-bottom: 20px;
 }

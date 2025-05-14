@@ -1,8 +1,8 @@
 {
-    "name": "produit",
+    "name": "boutique-produit",
     "version": "1.0.0",
     "private": true,
     "dependencies": {
-        "stripe": "^12.0.0"
+        "stripe": "^16.2.0"
     }
 }

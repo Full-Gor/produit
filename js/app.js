@@ -24,9 +24,10 @@ const products = [
   { id: 1, name: "T-shirt", price: 20 },
   { id: 2, name: "Jean", price: 50 },
   { id: 3, name: "Chaussures", price: 80 },
+  { id: 4, name: "Test Stripe", price: 0.5 }, // Produit de test à bas prix
 ];
 
-// Panier's state - Charger depuis localStorage s'il existe
+// Panier - Charger depuis localStorage s'il existe
 let cart = [];
 try {
   const savedCart = localStorage.getItem('cart');
@@ -128,7 +129,7 @@ async function checkout() {
     showNotification("Redirection vers la page de paiement...", "info");
     
     // Rediriger vers Stripe Checkout
-    await window.processPayment(cart, orderRef.id, total);
+    await window.processPayment(cart, orderRef.id, auth.currentUser.email);
     
   } catch (error) {
     console.error("Erreur:", error);
@@ -188,17 +189,6 @@ async function displayOrders() {
       "error"
     );
   }
-}
-
-// Afficher les notifications
-function showNotification(message, type) {
-  const notification = document.getElementById("notification");
-  notification.textContent = message;
-  notification.className = `notification ${type}`;
-  notification.style.display = "block";
-  setTimeout(() => {
-    notification.style.display = "none";
-  }, 3000);
 }
 
 // Gestion de l'authentification

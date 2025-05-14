@@ -1,65 +1,59 @@
 /**
  * Module de gestion des paiements pour la boutique en ligne
- * Ce module intègre Stripe Checkout via une API serverless
+ * Cette version utilise Stripe Checkout pour les paiements sécurisés
  */
 
-// Initialiser Stripe avec votre clé publique
+// Initialiser Stripe
 const stripe = Stripe('pk_test_51RGy61PQqougnU1CNivMCAiwJVnpZPPAafCKLVWiJZbD5rkqn5pFgJHXQMKSQRSSeqBzF2ZOaRvJeIipiwbisbzn00eqoHROHX');
 
-// Fonction pour gérer le processus de paiement
-async function processPayment(cartItems, orderId, total) {
+/**
+ * Traite le paiement avec Stripe Checkout
+ * @param {Array} cartItems - Articles du panier
+ * @param {string} orderId - ID de la commande dans Firestore
+ * @param {string} email - Email du client
+ */
+async function processPayment(cartItems, orderId, email) {
   try {
-    // Vérifier si l'utilisateur est connecté
-    if (!window.firebaseAuth.currentUser) {
-      window.showNotification("Veuillez vous connecter pour effectuer un paiement", "error");
-      return;
-    }
-
-    // Stocker dans localStorage pour un accès plus facile
-    localStorage.setItem('pendingOrderId', orderId);
-    localStorage.setItem('cartTotal', total);
-    
     // Afficher un message à l'utilisateur
-    window.showNotification("Préparation du paiement...", "info");
+    window.showNotification("Redirection vers la page de paiement sécurisé...", "info");
     
-    // Appeler notre API serverless pour créer une session Stripe
+    // Préparer les données pour l'API
+    const requestData = {
+      items: cartItems,
+      orderId: orderId,
+      userId: window.firebaseAuth.currentUser.uid,
+      email: email
+    };
+    
+    // Appel à l'API pour créer une session Stripe
     const response = await fetch('/api/create-checkout-session', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        items: cartItems,
-        orderId: orderId,
-        userId: window.firebaseAuth.currentUser.uid,
-        email: window.firebaseAuth.currentUser.email
-      }),
+      body: JSON.stringify(requestData),
     });
     
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Erreur lors de la création de la session de paiement");
+      throw new Error(errorData.error || 'Erreur lors de la création de la session de paiement');
     }
     
     const { sessionId } = await response.json();
     
-    // Rediriger vers Stripe Checkout avec l'ID de session
-    const { error } = await stripe.redirectToCheckout({
-      sessionId: sessionId
+    // Rediriger vers Stripe Checkout
+    const result = await stripe.redirectToCheckout({
+      sessionId: sessionId,
     });
     
-    if (error) {
-      throw new Error(error.message);
+    if (result.error) {
+      // En cas d'erreur pendant la redirection
+      throw new Error(result.error.message);
     }
     
   } catch (error) {
     console.error("Erreur lors du traitement du paiement:", error);
     window.showNotification("Erreur lors du paiement: " + error.message, "error");
-    
-    // En cas d'erreur, rediriger vers la page d'annulation
-    setTimeout(() => {
-      window.location.href = 'payment-cancel.html';
-    }, 1500);
   }
 }
 
@@ -91,4 +85,4 @@ window.formatAmount = formatAmount;
 window.calculateTotal = calculateTotal;
 
 // Log pour confirmer que le module a été chargé
-console.log("Module de paiement initialisé avec API serverless");
+console.log("Module de paiement Stripe initialisé");
