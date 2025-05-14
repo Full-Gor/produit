@@ -5,110 +5,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Boutique en ligne</title>
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="icon" href="data:,">
-  <!-- Ajouter Stripe.js depuis leur CDN -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
   <script src="https://js.stripe.com/v3/"></script>
+  <link rel="icon" href="data:,">
 </head>
 <body>
   <header>
-    <h1>Boutique produit</h1>
+    <h1>Boutique en ligne</h1>
     <nav>
-      <span id="user-status">Non connecté</span>
-      <button id="login-btn">Connexion</button>
-      <button id="signup-btn">Inscription</button>
+      <span id="user-status"></span>
+      <button id="cart-toggle">Panier (<span id="cart-count">0</span>)</button>
+      <button id="login-btn" style="display: none;">Connexion</button>
       <button id="logout-btn" style="display: none;">Déconnexion</button>
-      <button id="cart-btn">Panier (<span id="cart-count">0</span>)</button>
-      <button id="orders-btn" style="display: none;">Mes commandes</button>
     </nav>
   </header>
-
   <main>
-    <!-- Messages de notification -->
-    <div id="notification" class="notification"></div>
-
-    <!-- Formulaire de connexion/inscription -->
-    <div id="auth-section" style="display: none;">
-      <h2 id="auth-title"></h2>
-      <form id="auth-form">
-        <input type="email" id="email" placeholder="Email" required>
-        <input type="password" id="password" placeholder="Mot de passe" required>
-        <button type="submit" id="auth-submit"></button>
-      </form>
-    </div>
-
-    <!-- Produits -->
-    <section id="products">
-      <h2>Nos produits</h2>
-      <div id="product-list"></div>
-    </section>
-
-    <!-- Panier -->
-    <section id="cart-section" style="display: none;">
-      <h2>Votre panier</h2>
+    <section id="cart" style="display: none;">
+      <h2>Votre Panier</h2>
       <div id="cart-items"></div>
-      <p>Total : <span id="cart-total">0</span> €</p>
+      <p>Total : <span id="cart-total">0,00 €</span></p>
       <button id="checkout-btn">Passer au paiement</button>
     </section>
-
-    <!-- Historique des commandes -->
-    <section id="orders-section" style="display: none;">
-      <h2>Vos commandes</h2>
-      <div id="order-list"></div>
+    <section id="products">
+      <h2>Nos Produits</h2>
+      <div id="product-list"></div>
     </section>
   </main>
+  <footer>
+    <p>© 2025 Boutique en ligne</p>
+  </footer>
+  <div id="notification" style="display: none;"></div>
 
-  <!-- Firebase SDK -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-
+  <script>
+    // Configuration Firebase
     const firebaseConfig = {
-      apiKey: "AIzaSyAyhgERyprPvyYQfznLe-ksBu0lALsHG_I",
-      authDomain: "produit-93588.firebaseapp.com",
-      projectId: "produit-93588",
-      storageBucket: "produit-93588.firebasestorage.app",
-      messagingSenderId: "1011656067444",
-      appId: "1:1011656067444:web:591c2fc500bc0b42ce8421"
+      apiKey: "YOUR_FIREBASE_API_KEY",
+      authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+      projectId: "YOUR_FIREBASE_PROJECT_ID",
+      storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_FIREBASE_MESSAGING_SENDER_ID",
+      appId: "YOUR_FIREBASE_APP_ID"
     };
-
-    // Définir showNotification globalement
-    window.showNotification = function(message, type) {
-      const notification = document.getElementById("notification");
-      if (notification) {
-        notification.textContent = message;
-        notification.className = `notification ${type}`;
-        notification.style.display = "block";
-        setTimeout(() => {
-          notification.style.display = "none";
-        }, 3000);
-      } else {
-        console.log(message);
-      }
-    };
-
-    // Initialisation Firebase
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-
-    console.log("Firebase initialisé :", app.name);
-    
-    // Export pour app.js
-    window.firebaseAuth = auth;
-    window.firestoreDB = db;
-    
-    // Initialiser Stripe (clé publique directement ici)
-    window.stripeInstance = Stripe('pk_test_51RGy61PQqougnU1CNivMCAiwJVnpZPPAafCKLVWiJZbD5rkqn5pFgJHXQMKSQRSSeqBzF2ZOaRvJeIipiwbisbzn00eqoHROHX');
-    
-    // Informer lorsque le DOM est chargé
-    window.addEventListener('DOMContentLoaded', () => {
-      console.log("content loaded");
-    });
+    firebase.initializeApp(firebaseConfig);
+    window.firebaseAuth = firebase.auth();
+    window.db = firebase.firestore();
   </script>
-  
-  <!-- Scripts de l'application -->
-  <script type="module" src="js/checkout-client.js"></script>
-  <script type="module" src="js/app.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/checkout.js"></script>
 </body>
 </html>

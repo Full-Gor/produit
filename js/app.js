@@ -1,341 +1,151 @@
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import {
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  where,
-  doc,
-  updateDoc,
-  serverTimestamp,
-  orderBy
-} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-
 const auth = window.firebaseAuth;
-const db = window.firestoreDB;
+const db = window.db;
+const productsRef = db.collection('products');
+const cart = JSON.parse(localStorage.getItem('cart')) || [];
+let products = [];
 
-// Produits statiques
-const products = [
-  { id: 1, name: "T-shirt", price: 20 },
-  { id: 2, name: "Jean", price: 50 },
-  { id: 3, name: "Chaussures", price: 80 },
-  { id: 4, name: "Test Stripe", price: 0.5 }, // Produit de test à bas prix
-];
-
-// Panier - Charger depuis localStorage s'il existe
-let cart = [];
-try {
-  const savedCart = localStorage.getItem('cart');
-  if (savedCart) {
-    cart = JSON.parse(savedCart);
-  }
-} catch (e) {
-  console.error("Erreur lors du chargement du panier:", e);
+function showNotification(message, type) {
+  const notification = document.getElementById('notification');
+  notification.textContent = message;
+  notification.className = type;
+  notification.style.display = 'block';
+  setTimeout(() => {
+    notification.style.display = 'none';
+  }, 3000);
 }
 
-// Fonction pour sauvegarder le panier dans localStorage
-function saveCart() {
+function updateCartDisplay() {
+  const cartItems = document.getElementById('cart-items');
+  const cartCount = document.getElementById('cart-count');
+  const cartTotal = document.getElementById('cart-total');
+  cartItems.innerHTML = '';
+
+  if (cart.length === 0) {
+    cartItems.innerHTML = '<p>Votre panier est vide.</p>';
+  } else {
+    cart.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = 'cart-item';
+      div.innerHTML = `
+        <span>${item.name} - ${window.formatAmount(item.price)}</span>
+        <button onclick="removeFromCart(${index})">Supprimer</button>
+      `;
+      cartItems.appendChild(div);
+    });
+  }
+
+  cartCount.textContent = cart.length;
+  cartTotal.textContent = window.formatAmount(window.calculateTotal(cart));
   localStorage.setItem('cart', JSON.stringify(cart));
 }
 
-// Afficher les produits
+function addToCart(product) {
+  cart.push(product);
+  updateCartDisplay();
+  showNotification(`${product.name} ajouté au panier`, 'success');
+}
+
+function removeFromCart(index) {
+  cart.splice(index, 1);
+  updateCartDisplay();
+  showNotification('Article supprimé du panier', 'info');
+}
+
+async function checkout() {
+  if (!auth.currentUser) {
+    showNotification('Veuillez vous connecter pour passer une commande', 'error');
+    return;
+  }
+  if (cart.length === 0) {
+    showNotification('Votre panier est vide', 'error');
+    return;
+  }
+
+  try {
+    const total = window.calculateTotal(cart);
+    const orderRef = await db.collection('orders').add({
+      userId: auth.currentUser.uid,
+      items: cart,
+      total: total,
+      status: 'pending',
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+
+    showNotification('Redirection vers la page de paiement...', 'info');
+    await window.processPayment(cart, orderRef.id, total);
+  } catch (error) {
+    console.error('Erreur:', error);
+    showNotification('Erreur lors de la commande : ' + error.message, 'error');
+  }
+}
+
 function displayProducts() {
-  const productList = document.getElementById("product-list");
-  productList.innerHTML = "";
-  products.forEach((product) => {
-    const div = document.createElement("div");
-    div.className = "product";
+  const productList = document.getElementById('product-list');
+  productList.innerHTML = '';
+  products.forEach(product => {
+    const div = document.createElement('div');
+    div.className = 'product';
     div.innerHTML = `
-      <span>${product.name} - ${product.price} €</span>
-      <button onclick="addToCart(${product.id})">Ajouter au panier</button>
+      <h3>${product.name}</h3>
+      <p>Prix : ${window.formatAmount(product.price)}</p>
+      <button onclick="addToCart({name: '${product.name}', price: ${product.price}})">Ajouter au panier</button>
     `;
     productList.appendChild(div);
   });
 }
 
-// Ajouter au panier
-window.addToCart = function (productId) {
-  const product = products.find((p) => p.id === productId);
-  if (product) {
-    cart.push(product);
-    updateCart();
-    saveCart();
-    showNotification(`${product.name} ajouté au panier`, "success");
-  }
-};
+function updateUserStatus() {
+  const userStatus = document.getElementById('user-status');
+  const loginBtn = document.getElementById('login-btn');
+  const logoutBtn = document.getElementById('logout-btn');
 
-// Mettre à jour le panier
-function updateCart() {
-  const cartItems = document.getElementById("cart-items");
-  const cartCount = document.getElementById("cart-count");
-  const cartTotal = document.getElementById("cart-total");
-  cartItems.innerHTML = "";
-  cartCount.textContent = cart.length;
-
-  let total = 0;
-  cart.forEach((item, index) => {
-    total += item.price;
-    const div = document.createElement("div");
-    div.className = "cart-item";
-    div.innerHTML = `
-      <span>${item.name} - ${item.price} €</span>
-      <button onclick="removeFromCart(${index})">Supprimer</button>
-    `;
-    cartItems.appendChild(div);
-  });
-  cartTotal.textContent = total;
-}
-
-// Supprimer du panier
-window.removeFromCart = function (index) {
-  const item = cart.splice(index, 1)[0];
-  updateCart();
-  saveCart();
-  showNotification(`${item.name} retiré du panier`, "success");
-};
-
-// Passer la commande avec Stripe Checkout
-async function checkout() {
-  if (!auth.currentUser) {
-    showNotification(
-      "Veuillez vous connecter pour passer une commande",
-      "error"
-    );
-    return;
-  }
-  if (cart.length === 0) {
-    showNotification("Votre panier est vide", "error");
-    return;
-  }
-
-  try {
-    // Calculer le total
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
-    
-    // Enregistrer d'abord la commande dans Firestore
-    const orderRef = await addDoc(collection(db, "orders"), {
-      userId: auth.currentUser.uid,
-      items: cart,
-      total: total,
-      status: 'pending', // Commande en attente de paiement
-      timestamp: serverTimestamp()
-    });
-    
-    showNotification("Redirection vers la page de paiement...", "info");
-    
-    // Rediriger vers Stripe Checkout
-    await window.processPayment(cart, orderRef.id, auth.currentUser.email);
-    
-  } catch (error) {
-    console.error("Erreur:", error);
-    showNotification("Erreur lors de la commande : " + error.message, "error");
-  }
-}
-
-// Afficher l'historique des commandes
-async function displayOrders() {
-  if (!auth.currentUser) return;
-  const orderList = document.getElementById("order-list");
-  orderList.innerHTML = "";
-  try {
-    const q = query(
-      collection(db, "orders"),
-      where("userId", "==", auth.currentUser.uid),
-      orderBy("timestamp", "desc")
-    );
-    
-    const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.empty) {
-      orderList.innerHTML = "<p>Vous n'avez pas encore passé de commande.</p>";
-      return;
-    }
-    
-    querySnapshot.forEach((doc) => {
-      const order = doc.data();
-      const orderDate = order.timestamp ? new Date(order.timestamp.toDate()).toLocaleDateString() : 'Date inconnue';
-      
-      const div = document.createElement("div");
-      div.className = "order";
-      
-      // Ajouter un badge de statut
-      let statusBadge = '';
-      if (order.status === 'paid') {
-        statusBadge = '<span class="status-badge status-paid">Payée</span>';
-      } else if (order.status === 'pending') {
-        statusBadge = '<span class="status-badge status-pending">En attente</span>';
-      }
-      
-      div.innerHTML = `
-        <div class="order-header">
-          <span>Commande du ${orderDate} - ${order.total} € </span>
-          ${statusBadge}
-        </div>
-        <ul>${order.items
-          .map((item) => `<li>${item.name} - ${item.price} €</li>`)
-          .join("")}</ul>
-      `;
-      orderList.appendChild(div);
-    });
-  } catch (error) {
-    console.error("Erreur:", error);
-    showNotification(
-      "Erreur lors du chargement des commandes : " + error.message,
-      "error"
-    );
-  }
-}
-
-// Gestion de l'authentification
-function setupAuth() {
-  const authSection = document.getElementById("auth-section");
-  const authTitle = document.getElementById("auth-title");
-  const authSubmit = document.getElementById("auth-submit");
-  const authForm = document.getElementById("auth-form");
-
-  // Gestionnaire pour le bouton de connexion
-  document.getElementById("login-btn").addEventListener("click", () => {
-    authSection.style.display = "block";
-    authTitle.textContent = "Connexion";
-    authSubmit.textContent = "Se connecter";
-    authForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      
-      // Vérifier que les champs ne sont pas vides
-      if (!email || !password) {
-        showNotification("Veuillez remplir tous les champs", "error");
-        return;
-      }
-      
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-        showNotification("Connexion réussie", "success");
-        authSection.style.display = "none";
-      } catch (error) {
-        console.error("Code d'erreur:", error.code);
-        console.error("Message d'erreur complet:", error.message);
-        
-        // Messages d'erreur personnalisés pour une meilleure expérience utilisateur
-        if (error.code === "auth/user-not-found") {
-          showNotification("Utilisateur introuvable. Veuillez vous inscrire.", "error");
-        } else if (error.code === "auth/wrong-password") {
-          showNotification("Mot de passe incorrect.", "error");
-        } else if (error.code === "auth/invalid-credential") {
-          showNotification("Identifiants invalides. Vérifiez votre email et mot de passe.", "error");
-        } else {
-          showNotification("Erreur : " + error.message, "error");
-        }
-      }
-    };
-  });
-
-  // Gestionnaire pour le bouton d'inscription
-  document.getElementById("signup-btn").addEventListener("click", () => {
-    authSection.style.display = "block";
-    authTitle.textContent = "Inscription";
-    authSubmit.textContent = "S'inscrire";
-    authForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      
-      // Vérifier que les champs ne sont pas vides
-      if (!email || !password) {
-        showNotification("Veuillez remplir tous les champs", "error");
-        return;
-      }
-      
-      // Vérifier que le mot de passe a au moins 6 caractères
-      if (password.length < 6) {
-        showNotification("Le mot de passe doit comporter au moins 6 caractères", "error");
-        return;
-      }
-      
-      try {
-        await createUserWithEmailAndPassword(auth, email, password);
-        showNotification("Inscription réussie", "success");
-        authSection.style.display = "none";
-      } catch (error) {
-        console.error("Code d'erreur:", error.code);
-        console.error("Message d'erreur complet:", error.message);
-        
-        // Messages d'erreur personnalisés
-        if (error.code === "auth/email-already-in-use") {
-          showNotification("Cet email est déjà utilisé. Essayez de vous connecter.", "error");
-        } else if (error.code === "auth/invalid-email") {
-          showNotification("Format d'email invalide.", "error");
-        } else if (error.code === "auth/weak-password") {
-          showNotification("Mot de passe trop faible. Utilisez au moins 6 caractères.", "error");
-        } else {
-          showNotification("Erreur : " + error.message, "error");
-        }
-      }
-    };
-  });
-
-  // Gestionnaire pour le bouton de déconnexion
-  document.getElementById("logout-btn").addEventListener("click", async () => {
-    try {
-      await signOut(auth);
-      showNotification("Déconnexion réussie", "success");
-    } catch (error) {
-      showNotification("Erreur : " + error.message, "error");
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      userStatus.textContent = `Bienvenue, ${user.email}`;
+      loginBtn.style.display = 'none';
+      logoutBtn.style.display = 'inline';
+    } else {
+      userStatus.textContent = 'Non connecté';
+      loginBtn.style.display = 'inline';
+      logoutBtn.style.display = 'none';
     }
   });
-
-  // Gestionnaire pour le bouton du panier
-  document.getElementById("cart-btn").addEventListener("click", () => {
-    document.getElementById("products").style.display = "none";
-    document.getElementById("cart-section").style.display = "block";
-    document.getElementById("orders-section").style.display = "none";
-  });
-
-  // Gestionnaire pour le bouton des commandes
-  document.getElementById("orders-btn").addEventListener("click", () => {
-    document.getElementById("products").style.display = "none";
-    document.getElementById("cart-section").style.display = "none";
-    document.getElementById("orders-section").style.display = "block";
-    displayOrders();
-  });
-
-  // Gestionnaire pour le bouton de validation de commande
-  document.getElementById("checkout-btn").addEventListener("click", checkout);
 }
 
-// État de l'utilisateur
-onAuthStateChanged(auth, (user) => {
-  const userStatus = document.getElementById("user-status");
-  const loginBtn = document.getElementById("login-btn");
-  const signupBtn = document.getElementById("signup-btn");
-  const logoutBtn = document.getElementById("logout-btn");
-  const ordersBtn = document.getElementById("orders-btn");
+document.getElementById('cart-toggle').addEventListener('click', () => {
+  const cartSection = document.getElementById('cart');
+  cartSection.style.display = cartSection.style.display === 'none' ? 'block' : 'none';
+});
 
-  if (user) {
-    userStatus.textContent = `Connecté : ${user.email}`;
-    loginBtn.style.display = "none";
-    signupBtn.style.display = "none";
-    logoutBtn.style.display = "inline";
-    ordersBtn.style.display = "inline";
-  } else {
-    userStatus.textContent = "Non connecté";
-    loginBtn.style.display = "inline";
-    signupBtn.style.display = "inline";
-    logoutBtn.style.display = "none";
-    ordersBtn.style.display = "none";
-    document.getElementById("products").style.display = "block";
-    document.getElementById("cart-section").style.display = "none";
-    document.getElementById("orders-section").style.display = "none";
+document.getElementById('login-btn').addEventListener('click', () => {
+  const email = prompt('Entrez votre email :');
+  const password = prompt('Entrez votre mot de passe :');
+  if (email && password) {
+    auth.signInWithEmailAndPassword(email, password)
+      .then(() => showNotification('Connexion réussie', 'success'))
+      .catch(error => showNotification('Erreur de connexion : ' + error.message, 'error'));
   }
 });
 
-// Initialisation
-displayProducts();
-updateCart(); // Mettre à jour le panier au chargement
-setupAuth();
+document.getElementById('logout-btn').addEventListener('click', () => {
+  auth.signOut()
+    .then(() => showNotification('Déconnexion réussie', 'success'))
+    .catch(error => showNotification('Erreur de déconnexion : ' + error.message, 'error'));
+});
+
+document.getElementById('checkout-btn').addEventListener('click', checkout);
+
+async function init() {
+  try {
+    const snapshot = await productsRef.get();
+    products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    displayProducts();
+    updateCartDisplay();
+    updateUserStatus();
+  } catch (error) {
+    console.error('Erreur lors du chargement des produits:', error);
+    showNotification('Erreur lors du chargement des produits', 'error');
+  }
+}
+
+window.addEventListener('load', init);
